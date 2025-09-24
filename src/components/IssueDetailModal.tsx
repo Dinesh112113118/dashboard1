@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { Issue } from '../types';
 import { X, MapPin, Calendar, User, Phone, AlertCircle, MessageSquare, FileText, Building2, Trash2, UploadCloud, CheckCircle2 } from './icons';
 import { useAuth } from '../context/AuthContext';
+import api from '../services/api';
 
 interface IssueDetailModalProps {
   issue: Issue;
@@ -16,12 +17,14 @@ const IssueDetailModal: React.FC<IssueDetailModalProps> = ({ issue, isOpen, onCl
   const [resolutionNotes, setResolutionNotes] = useState('');
   const [resolutionImage, setResolutionImage] = useState<File | null>(null);
   const [resolutionImagePreview, setResolutionImagePreview] = useState<string | null>(null);
+  const [isResolving, setIsResolving] = useState(false);
 
   useEffect(() => {
     if (issue) {
       setResolutionNotes('');
       setResolutionImage(null);
       setResolutionImagePreview(null);
+      setIsResolving(false);
     }
   }, [issue]);
 
@@ -35,18 +38,26 @@ const IssueDetailModal: React.FC<IssueDetailModalProps> = ({ issue, isOpen, onCl
     }
   };
 
-  const handleResolveSubmit = () => {
+  const handleResolveSubmit = async () => {
     if (!resolutionImage || !resolutionNotes) {
       alert('Please provide resolution notes and an image.');
       return;
     }
-    onUpdateIssue(issue.id, {
-      status: 'Resolved',
-      resolvedAt: new Date(),
-      resolvedImageUrl: resolutionImagePreview,
-      resolutionNotes,
-      resolvedBy: user?.username || 'Staff',
-    });
+    setIsResolving(true);
+    try {
+      await api.resolveIssue(issue.id, {
+        resolutionNotes,
+        resolutionImage,
+        resolvedBy: user?.username || 'Staff',
+      });
+      // The parent will refetch and close the modal
+      onUpdateIssue(issue.id, {}); // Trigger refetch in parent
+    } catch (error) {
+      console.error("Failed to resolve issue:", error);
+      alert("Failed to submit resolution. Please try again.");
+    } finally {
+      setIsResolving(false);
+    }
   };
 
   const handleDelete = () => {
@@ -118,7 +129,6 @@ const IssueDetailModal: React.FC<IssueDetailModalProps> = ({ issue, isOpen, onCl
               <div>
                 <h3 className="text-lg font-semibold text-on-surface mb-4">Basic Information</h3>
                 <div className="space-y-4">
-                  {/* ... other info items */}
                   <div className="flex items-start gap-3 p-4 bg-surface-container rounded-xl">
                     <FileText className="w-5 h-5 text-primary mt-0.5" />
                     <div><p className="font-medium text-on-surface">Issue ID</p><p className="text-on-surface-variant">{issue.id}</p></div>
@@ -174,7 +184,6 @@ const IssueDetailModal: React.FC<IssueDetailModalProps> = ({ issue, isOpen, onCl
               <div>
                 <h3 className="text-lg font-semibold text-on-surface mb-4">Location Details</h3>
                 <div className="space-y-4">
-                  {/* ... location items */}
                    <div className="flex items-start gap-3 p-4 bg-surface-container rounded-xl">
                     <MapPin className="w-5 h-5 text-primary mt-0.5" />
                     <div><p className="font-medium text-on-surface">Address</p><p className="text-on-surface-variant">{issue.locationAddress}</p></div>
@@ -246,8 +255,17 @@ const IssueDetailModal: React.FC<IssueDetailModalProps> = ({ issue, isOpen, onCl
                     </div>
                   </div>
                   <div className="flex flex-wrap gap-4 pt-4">
-                    <button onClick={handleResolveSubmit} className="flex items-center gap-2 bg-primary text-on-primary px-6 py-3 rounded-xl font-medium hover:bg-primary/90 transition-colors">
-                      <CheckCircle2 className="w-5 h-5" /> Submit Resolution
+                    <button onClick={handleResolveSubmit} disabled={isResolving} className="flex items-center gap-2 bg-primary text-on-primary px-6 py-3 rounded-xl font-medium hover:bg-primary/90 transition-colors disabled:opacity-50 disabled:cursor-not-allowed">
+                      {isResolving ? (
+                        <>
+                          <div className="w-5 h-5 border-2 border-on-primary/30 border-t-on-primary rounded-full animate-spin"></div>
+                          Submitting...
+                        </>
+                      ) : (
+                        <>
+                          <CheckCircle2 className="w-5 h-5" /> Submit Resolution
+                        </>
+                      )}
                     </button>
                     <button onClick={() => onUpdateIssue(issue.id, { status: 'Error' })} className="flex items-center gap-2 text-error px-6 py-3 rounded-xl font-medium hover:bg-error-container transition-colors">
                       <AlertCircle className="w-5 h-5" /> Mark as Error
